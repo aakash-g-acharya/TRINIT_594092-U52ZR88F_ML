@@ -1,6 +1,6 @@
-import streamlit as sl
-import pandas as pd
 import numpy as np
+import pandas as pd
+import streamlit as sl
 
 D = {
     "Andhra Pradesh": [
@@ -841,38 +841,66 @@ with model:
                                        "Puducherry"], index=0)
 
     District = sel_col.selectbox("DISTRICT:", options=D[State], index=0)
+    Month = sel_col.selectbox("Month:",
+                              options=['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV',
+                                       'DEC'], index=0)
 
-    N = sel_col.slider("Ratio of Nitrogen content in soil:", min_value=0, max_value=150, value=35, step=1)
-    P = sel_col.slider("Ratio of Phosphorous content in soil:", min_value=0, max_value=150, value=54, step=1)
-    K = sel_col.slider("Ratio of Potassium content in soil:", min_value=0, max_value=210, value=15, step=1)
-    Ph = sel_col.slider("PH value of the soil:", min_value=0.0, max_value=14.0, value=7.0, step=0.1)
+    flag = sel_col.selectbox("Do you have soil test kit?",
+                             options=['YES', 'NO'], index=0)
+    if flag == 'YES':
+        N = sel_col.slider("Ratio of Nitrogen content in soil:", min_value=0, max_value=150, value=35, step=1)
+        P = sel_col.slider("Ratio of Phosphorous content in soil:", min_value=0, max_value=150, value=54, step=1)
+        K = sel_col.slider("Ratio of Potassium content in soil:", min_value=0, max_value=210, value=15, step=1)
+        Ph = sel_col.slider("PH value of the soil:", min_value=0.0, max_value=14.0, value=7.0, step=0.1)
 
-    Temperature = 24.51
-    Humidity = 87
-    Rainfall = 62
+        from geopy.geocoders import Nominatim
 
-    xtrain, xtest, ytrain, ytest = train_test_split(x1, y1, test_size=0.2, random_state=2)
-    import xgboost as xgb
+        geolocator = Nominatim(user_agent="MyApp")
 
-    XB = xgb.XGBClassifier()
-    XB.fit(xtrain, ytrain)
-    predicted = XB.predict(xtest)
+        location = geolocator.geocode(District)
 
-    accuracy = metrics.accuracy_score(ytest, predicted)
-    dis_col.subheader("Model's Accuracy is: ")
-    dis_col.write(accuracy)
+        latitude = round(location.latitude, 2)
+        longitude = round(location.longitude, 2)
 
-    dis_col.subheader("Best crop to grow: ")
-    dis_col.write(Map[XB.predict(np.asarray([[N, P, K, Temperature, Humidity, Ph, Rainfall]]))[0]])
-    dis_col.subheader("Other suitable crops: ")
-    Prob = XB.predict_proba(np.asarray([[N, P, K, Temperature, Humidity, Ph, Rainfall]]))[0]
+        url = "https://api.openweathermap.org/data/2.5/weather?lat=" + str(latitude) + "&lon=" + str(longitude) + \
+              "&appid=345ef5a50d96f8c85bc1b12a2ce088ca"
 
-    values = np.sort(Prob)[::-1]
+        import requests
 
-    sorter = np.argsort(Prob)
+        response = requests.get(url)
+        JSON = response.json()
 
-    R = sorter[np.searchsorted(Prob, values, sorter=sorter)]
-    dis_col.write(Map[R[1:5][0]])
-    dis_col.write(Map[R[1:5][1]])
-    dis_col.write(Map[R[1:5][2]])
-    dis_col.write(Map[R[1:5][3]])
+        R = pd.read_csv("C:/Users\gokul\Desktop\ML\district wise rainfall normal.csv")
+
+        Temperature = JSON['main']['temp'] - 273.15
+        Humidity = JSON['main']['humidity']
+        Rainfall = R[Month.upper()].loc[(R['STATE_UT_NAME'] == State.upper()) & (R['DISTRICT'] == District.upper())]. \
+            values[0]
+
+        xtrain, xtest, ytrain, ytest = train_test_split(x1, y1, test_size=0.2, random_state=2)
+        import xgboost as xgb
+
+        XB = xgb.XGBClassifier()
+        XB.fit(xtrain, ytrain)
+        predicted = XB.predict(xtest)
+
+        accuracy = metrics.accuracy_score(ytest, predicted)
+        dis_col.subheader("Model's Accuracy is: ")
+        dis_col.write(accuracy)
+
+        dis_col.subheader("Best crop to grow: ")
+        dis_col.write(Map[XB.predict(np.asarray([[N, P, K, Temperature, Humidity, Ph, Rainfall]]))[0]])
+        dis_col.subheader("Other suitable crops: ")
+        Prob = XB.predict_proba(np.asarray([[N, P, K, Temperature, Humidity, Ph, Rainfall]]))[0]
+
+        values = np.sort(Prob)[::-1]
+
+        sorter = np.argsort(Prob)
+
+        R = sorter[np.searchsorted(Prob, values, sorter=sorter)]
+        dis_col.write(Map[R[1:5][0]])
+        dis_col.write(Map[R[1:5][1]])
+        dis_col.write(Map[R[1:5][2]])
+        dis_col.write(Map[R[1:5][3]])
+    else:
+        pass
